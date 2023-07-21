@@ -17,6 +17,7 @@ jobs:
         (
           "netflix"
           "youtube"
+          "primevideo"
           "hbo"
           "disney"
           "roku"
@@ -32,6 +33,10 @@ jobs:
           "playstation"
           "nintendo"
           "xbox"
+          "steam"
+          "ea"
+          "epicgames"
+          "ubisoft"
         )
 
     steps:
