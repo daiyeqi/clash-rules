@@ -8,108 +8,72 @@ on:
       - master
     paths-ignore:
       - "**/README.md"
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RULESET_LIST: |
+        (
+          "netflix"
+          "youtube"
+          "primevideo"
+          "hbo"
+          "disney"
+          "roku"
+          "spotify"
+          "tiktok"
+          "twitch"
+          "xvideos"
+          "pornhub"
+          "dmm"
+          "dlsite"
+          "telegram"
+          "instagram"
+          "threads"
+          "facebook"
+          "snap"
+          "speedtest"
+          "openai"
+          "playstation"
+          "nintendo"
+          "xbox"
+          "steam"
+          "ea"
+          "epicgames"
+          "ubisoft"
+        )
+
     steps:
-      - name: Set variables
+      - name: Compare latest tags and set variables
         run: |
-          echo "RELEASE_NAME=Released on $(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "custom_icloud=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/icloud.txt" >> $GITHUB_ENV
-          echo "custom_tld_not_cn=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/tld-!cn.txt" >> $GITHUB_ENV
-          echo "custom_private=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/private.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_reject=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/reject-list.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_proxy=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/proxy-list.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_direct=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/direct-list.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_gfw=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_greatfire=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/greatfire.txt" >> $GITHUB_ENV
-          echo "felixonmars_apple=https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/apple.china.conf" >> $GITHUB_ENV
-          echo "felixonmars_google=https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/google.china.conf" >> $GITHUB_ENV
-          echo "cn_cidr=https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt" >> $GITHUB_ENV
-          echo "lan_cidr=https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/private.txt" >> $GITHUB_ENV
-          echo "telegram_cidr=https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt" >> $GITHUB_ENV
+          upstreamLatestTag=$(curl -sSL --connect-timeout 5 --retry 5 -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/daiyeqi/domain-list-custom/releases/latest | grep "tag_name" | cut -d\" -f4)
+          thisLatestTag=$(curl -sSL --connect-timeout 5 --retry 5 -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/${{ github.repository }}/releases/latest | grep "tag_name" | cut -d\" -f4)
+          if [[ $upstreamLatestTag != $thisLatestTag ]]; then
+            echo "NeedToSync=true" >> $GITHUB_ENV
+          fi
+          echo "RELEASE_NAME=$upstreamLatestTag" >> $GITHUB_ENV
+          echo "TAG_NAME=$upstreamLatestTag" >> $GITHUB_ENV
         shell: bash
 
-      - name: Checkout the "hidden" branch
-        uses: actions/checkout@v5
-        with:
-          ref: hidden
-
-      - name: Generate icloud.txt file
+      - name: Generate Clash RULE-SET file
+        if: ${{ env.NeedToSync }}
         run: |
-          echo "payload:" > icloud.txt
-          curl -sSL ${custom_icloud} | grep -E "^(full|domain):" | awk -F ':' '{printf "  - |+.%s|\n", $2}' | sed "s/|/'/g" >> icloud.txt
-
-      - name: Generate google.txt file
-        run: |
-          echo "payload:" > google.txt
-          curl -sSL ${felixonmars_google} | perl -ne '/^server=\/([^\/]+)\// && print "  - |+.$1|\n"' | sed "s/|/'/g" >> google.txt
-
-      - name: Generate apple.txt file
-        run: |
-          echo "payload:" > apple.txt
-          curl -sSL ${felixonmars_apple} | perl -ne '/^server=\/([^\/]+)\// && print "  - |+.$1|\n"' | sed "s/|/'/g" >> apple.txt
-
-      - name: Generate private.txt file
-        run: |
-          echo "payload:" > private.txt
-          curl -sSL ${custom_private} | awk -F ':' '/^full:/ {printf "  - |%s|\n", $2}' | sed "s/|/'/g" >> private.txt
-          curl -sSL ${custom_private} | awk -F ':' '/^domain:/ {printf "  - |+.%s|\n", $2}' | sed "s/|/'/g" >> private.txt
-
-      - name: Generate direct.txt file
-        run: |
-          echo "payload:" > direct.txt
-          curl -sSL ${Loyalsoldier_direct} | grep -Ev "^(regexp|keyword):" | perl -ne '/^(full:)([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |$2|\n"' | sed "s/|/'/g" >> direct.txt
-          curl -sSL ${Loyalsoldier_direct} | grep -Ev "^(regexp|keyword|full):" | perl -ne '/^(domain:)?([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |+.$2|\n"' | sed "s/|/'/g" >> direct.txt
-
-      - name: Generate proxy.txt file
-        run: |
-          echo "payload:" > proxy.txt
-          curl -sSL ${Loyalsoldier_proxy} | grep -Ev "^(regexp|keyword):" | perl -ne '/^(full:)([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |$2|\n"' | sed "s/|/'/g" >> proxy.txt
-          curl -sSL ${Loyalsoldier_proxy} | grep -Ev "^(regexp|keyword|full):" | perl -ne '/^(domain:)?([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |+.$2|\n"' | sed "s/|/'/g" >> proxy.txt
-
-      - name: Generate reject.txt file
-        run: |
-          echo "payload:" > reject.txt
-          curl -sSL ${Loyalsoldier_reject} | grep -Ev "^(regexp|keyword):" | perl -ne '/^(domain:|full:)?([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |+.$2|\n"' | sed "s/|/'/g" >> reject.txt
-
-      - name: Generate gfw.txt file
-        run: |
-          echo "payload:" > gfw.txt
-          curl -sSL ${Loyalsoldier_gfw} | grep -Ev "^(regexp|keyword):" | perl -ne '/^(domain:|full:)?([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |+.$2|\n"' | sed "s/|/'/g" >> gfw.txt
-
-      - name: Generate greatfire.txt file
-        run: |
-          echo "payload:" > greatfire.txt
-          curl -sSL ${Loyalsoldier_greatfire} | grep -Ev "^(regexp|keyword):" | perl -ne '/^(domain:|full:)?([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |+.$2|\n"' | sed "s/|/'/g" >> greatfire.txt
-
-      - name: Generate tld-not-cn.txt file
-        run: |
-          echo "payload:" > tld-not-cn.txt
-          curl -sSL "${custom_tld_not_cn}" | perl -ne '/^domain:([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |+.$1|\n"' | sed "s/|/'/g" >> tld-not-cn.txt
-
-      - name: Generate cncidr.txt file
-        run: |
-          echo "payload:" > cncidr.txt
-          curl -sSL ${cn_cidr} | perl -ne '/(.+\/\d+)/ && print "  - |$1|\n"' | sed "s/|/'/g" >> cncidr.txt
-
-      - name: Generate telegramcidr.txt file
-        run: |
-          echo "payload:" > telegramcidr.txt
-          curl -sSL ${telegram_cidr} | perl -ne '/(.+\/\d+)/ && print "  - |$1|\n"' | sed "s/|/'/g" >> telegramcidr.txt
-
-      - name: Generate lancidr.txt file
-        run: |
-          echo "payload:" > lancidr.txt
-          curl -sSL ${lan_cidr} | perl -ne '/(.+\/\d+)/ && print "  - |$1|\n"' | sed "s/|/'/g" >> lancidr.txt
+          array=${{ env.RULESET_LIST }}
+          for item in "${array[@]}"
+          do
+            echo "payload:" > ${item}.txt
+            curl -sSL https://raw.githubusercontent.com/daiyeqi/domain-list-custom/release/${item}.txt | grep -E "^(full|domain):" | awk -F ':' '{printf "  - |+.%s|\n", $2}' | sed "s/|/'/g" >> ${item}.txt
+          done
 
       - name: Move files to publish directory
+        if: ${{ env.NeedToSync }}
         run: |
           mkdir -p publish
           cp *.txt ./publish/
 
       - name: Release and upload assets
+        if: ${{ env.NeedToSync }}
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ env.RELEASE_NAME }}
@@ -122,6 +86,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Git push assets to "release" branch
+        if: ${{ env.NeedToSync }}
         run: |
           cd publish || exit 1
           git init
@@ -132,10 +97,3 @@ jobs:
           git commit -m "${{ env.RELEASE_NAME }}"
           git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git push -f origin release
-
-      - name: Purge jsdelivr CDN
-        run: |
-          cd publish || exit 1
-          for file in $(ls); do
-            curl -i "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/${file}"
-          done
