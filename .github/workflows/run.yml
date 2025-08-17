@@ -8,33 +8,32 @@ on:
       - master
     paths-ignore:
       - "**/README.md"
+      
+env:
+  EXTRA_RULES_FILES: "netflix youtube primevideo hbo disney roku spotify tiktok twitch xvideos pornhub dmm dlsite telegram instagram threads facebook snap speedtest openai playstation nintendo xbox steam ea epicgames ubisoft"
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Set variables
         run: |
-          echo "RELEASE_NAME=Released on $(date +%Y%m%d%H%M)" >> $GITHUB_ENV
           echo "TAG_NAME=$(date +%Y%m%d%H%M)" >> $GITHUB_ENV
-          echo "custom_icloud=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/icloud.txt" >> $GITHUB_ENV
-          echo "custom_tld_not_cn=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/tld-!cn.txt" >> $GITHUB_ENV
-          echo "custom_private=https://raw.githubusercontent.com/Loyalsoldier/domain-list-custom/release/private.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_reject=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/reject-list.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_proxy=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/proxy-list.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_direct=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/direct-list.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_gfw=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/gfw.txt" >> $GITHUB_ENV
-          echo "Loyalsoldier_greatfire=https://raw.githubusercontent.com/Loyalsoldier/v2ray-rules-dat/release/greatfire.txt" >> $GITHUB_ENV
+          echo "custom_icloud=https://raw.githubusercontent.com/daiyeqi/domain-list-custom/release/icloud.txt" >> $GITHUB_ENV
+          echo "custom_tld_not_cn=https://raw.githubusercontent.com/daiyeqi/domain-list-custom/release/tld-!cn.txt" >> $GITHUB_ENV
+          echo "custom_private=https://raw.githubusercontent.com/daiyeqi/domain-list-custom/release/private.txt" >> $GITHUB_ENV
+          echo "Loyalsoldier_reject=https://raw.githubusercontent.com/daiyeqi/v2ray-rules-dat/release/reject-list.txt" >> $GITHUB_ENV
+          echo "Loyalsoldier_proxy=https://raw.githubusercontent.com/daiyeqi/v2ray-rules-dat/release/proxy-list.txt" >> $GITHUB_ENV
+          echo "Loyalsoldier_direct=https://raw.githubusercontent.com/daiyeqi/v2ray-rules-dat/release/direct-list.txt" >> $GITHUB_ENV
+          echo "Loyalsoldier_gfw=https://raw.githubusercontent.com/daiyeqi/v2ray-rules-dat/release/gfw.txt" >> $GITHUB_ENV
+          echo "Loyalsoldier_greatfire=https://raw.githubusercontent.com/daiyeqi/v2ray-rules-dat/release/greatfire.txt" >> $GITHUB_ENV
           echo "felixonmars_apple=https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/apple.china.conf" >> $GITHUB_ENV
           echo "felixonmars_google=https://raw.githubusercontent.com/felixonmars/dnsmasq-china-list/master/google.china.conf" >> $GITHUB_ENV
           echo "cn_cidr=https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/cn.txt" >> $GITHUB_ENV
           echo "lan_cidr=https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/private.txt" >> $GITHUB_ENV
           echo "telegram_cidr=https://raw.githubusercontent.com/Loyalsoldier/geoip/release/text/telegram.txt" >> $GITHUB_ENV
+          echo "RULETAR_HASH=https://raw.githubusercontent.com/daiyeqi/clash-rules/release/rules.tar.sha256sum" >> $GITHUB_ENV
         shell: bash
-
-      - name: Checkout the "hidden" branch
-        uses: actions/checkout@v5
-        with:
-          ref: hidden
 
       - name: Generate icloud.txt file
         run: |
@@ -104,24 +103,45 @@ jobs:
           echo "payload:" > lancidr.txt
           curl -sSL ${lan_cidr} | perl -ne '/(.+\/\d+)/ && print "  - |$1|\n"' | sed "s/|/'/g" >> lancidr.txt
 
-      - name: Move files to publish directory
+      - name: Generate Clash RULE-SET file
+        run: |
+          for rules_file in ${{ env.EXTRA_RULES_FILES }}; do
+            echo "payload:" > ${rules_file}.txt
+            curl -sSL https://raw.githubusercontent.com/daiyeqi/v2ray-rules-dat/release/${rules_file}.txt | grep -Ev "^(regexp|keyword):" | perl -ne '/^(full:)([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |$2|\n"' | sed "s/|/'/g" >> ${rules_file}.txt
+            curl -sSL https://raw.githubusercontent.com/daiyeqi/v2ray-rules-dat/release/${rules_file}.txt | grep -Ev "^(regexp|keyword|full):" | perl -ne '/^(domain:)?([-_a-zA-Z0-9]+(\.[-_a-zA-Z0-9]+)*)/ && print "  - |+.$2|\n"' | sed "s/|/'/g" >> ${rules_file}.txt
+          done
+
+      - name: Move and tar files and generate sha256 hash
         run: |
           mkdir -p publish
           cp *.txt ./publish/
+          cd publish || exit 1
+          tar --sort=name --mtime='1970-01-01 00:00:00Z' -cf rules.tar *.txt
+          sha256sum rules.tar > rules.tar.sha256sum
+
+      - name: Compare build checksum against previous release
+        run: |
+          cd publish || exit 1
+          if ! diff -q rules.tar.sha256sum <(curl -sL "${{ env.RULETAR_HASH }}"); then
+            echo "NEED_RELEASE=true" >> $GITHUB_ENV
+          fi  
 
       - name: Release and upload assets
+        if: ${{ env.NEED_RELEASE }}
         uses: softprops/action-gh-release@v2
         with:
-          name: ${{ env.RELEASE_NAME }}
+          name: ${{ env.TAG_NAME }}
           tag_name: ${{ env.TAG_NAME }}
           draft: false
           prerelease: false
           files: |
-            ./publish/*
+            ./publish/rules.tar
+            ./publish/rules.tar.sha256sum
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Git push assets to "release" branch
+        if: ${{ env.NEED_RELEASE }}
         run: |
           cd publish || exit 1
           git init
@@ -129,13 +149,6 @@ jobs:
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b release
           git add .
-          git commit -m "${{ env.RELEASE_NAME }}"
+          git commit -m "Released on  ${{ env.TAG_NAME }}"
           git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git push -f origin release
-
-      - name: Purge jsdelivr CDN
-        run: |
-          cd publish || exit 1
-          for file in $(ls); do
-            curl -i "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/${file}"
-          done
